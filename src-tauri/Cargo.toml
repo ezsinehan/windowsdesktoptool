@@ -1,0 +1,40 @@
+[package]
+name = "windowsdesktoptool"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "windowsdesktoptool_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "windowsdesktoptool"
+path = "src/main.rs"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+ureq = "3"
+winreg = "0.55"
+dirs = "6"
+log = "0.4"
+env_logger = "0.11"
+
+[dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Threading",
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_System_Com",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_Security",
+]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

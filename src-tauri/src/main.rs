@@ -1,5 +1,5 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Console window kept visible even in release builds — this is a dev tool
+// and we want to see logs during save/restore operations.
 
 fn main() {
     windowsdesktoptool_lib::run()

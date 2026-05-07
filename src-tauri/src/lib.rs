@@ -5,14 +5,35 @@ mod brave;
 mod vdesktop;
 mod winapi_helpers;
 
+use log::{error, info};
 use session::{Session, SessionSummary};
 
 #[tauri::command]
 fn save_session(name: String) -> Result<Session, String> {
-    let windows = capture::capture_windows().map_err(|e| e.to_string())?;
-    let brave_tabs = brave::capture_tabs().unwrap_or_default();
+    info!("=== SAVE SESSION: '{}' ===", name);
+    let windows = capture::capture_windows().map_err(|e| {
+        error!("Window capture failed: {}", e);
+        e.to_string()
+    })?;
+    info!("Captured {} windows", windows.len());
+
+    let brave_tabs = match brave::capture_tabs() {
+        Ok(tabs) => {
+            info!("Captured {} Brave tabs", tabs.len());
+            tabs
+        }
+        Err(e) => {
+            info!("Brave tabs not captured ({}). Skipping.", e);
+            Vec::new()
+        }
+    };
+
     let session = Session::new(name.clone(), windows, brave_tabs);
-    session::save(&session).map_err(|e| e.to_string())?;
+    session::save(&session).map_err(|e| {
+        error!("Save failed: {}", e);
+        e.to_string()
+    })?;
+    info!("Session '{}' saved successfully", name);
     Ok(session)
 }
 
@@ -28,17 +49,41 @@ fn get_session(name: String) -> Result<Session, String> {
 
 #[tauri::command]
 fn delete_session(name: String) -> Result<(), String> {
+    info!("Deleting session: '{}'", name);
     session::delete(&name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn restore_session(name: String) -> Result<(), String> {
-    let session = session::load(&name).map_err(|e| e.to_string())?;
-    restore::restore(&session).map_err(|e| e.to_string())
+    info!("=== RESTORE SESSION: '{}' ===", name);
+    let session = session::load(&name).map_err(|e| {
+        error!("Failed to load session: {}", e);
+        e.to_string()
+    })?;
+    info!(
+        "Loaded session with {} windows and {} Brave tabs",
+        session.windows.len(),
+        session.brave_tabs.len()
+    );
+    let result = restore::restore(&session).map_err(|e| {
+        error!("Restore failed: {}", e);
+        e.to_string()
+    });
+    if result.is_ok() {
+        info!("=== RESTORE COMPLETE ===");
+    }
+    result
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize logger. Default to INFO level; can be overridden with RUST_LOG env var.
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format_timestamp_millis()
+        .init();
+
+    info!("Desktop Session Manager starting up");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![

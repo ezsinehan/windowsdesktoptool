@@ -1,4 +1,5 @@
 use anyhow::Result;
+use log::{debug, info};
 use std::sync::Mutex;
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
 use windows::Win32::UI::WindowsAndMessaging::EnumWindows;
@@ -25,6 +26,7 @@ fn is_excluded_exe(exe_path: &str) -> bool {
 }
 
 pub fn capture_windows() -> Result<Vec<WindowInfo>> {
+    info!("Enumerating top-level windows...");
     let results: Mutex<Vec<WindowInfo>> = Mutex::new(Vec::new());
 
     unsafe {
@@ -35,6 +37,23 @@ pub fn capture_windows() -> Result<Vec<WindowInfo>> {
     }
 
     let windows = results.into_inner().unwrap();
+    for w in &windows {
+        info!(
+            "  + {} | {} | {}x{} @ ({}, {}){}",
+            w.title,
+            std::path::Path::new(&w.exe_path)
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default(),
+            w.width,
+            w.height,
+            w.x,
+            w.y,
+            w.virtual_desktop_index
+                .map(|i| format!(" [Desktop {}]", i + 1))
+                .unwrap_or_default(),
+        );
+    }
     Ok(windows)
 }
 
@@ -70,6 +89,7 @@ unsafe extern "system" fn enum_window_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
 
     // Skip excluded system processes
     if is_excluded_exe(&exe_path) {
+        debug!("  - skip system process: {}", exe_path);
         return BOOL(1);
     }
 

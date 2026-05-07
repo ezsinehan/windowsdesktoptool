@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use log::{info, warn};
 use std::collections::HashMap;
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
 use windows::Win32::System::Diagnostics::ToolHelp::{
@@ -17,8 +18,9 @@ use crate::winapi_helpers;
 /// Restore a saved session: relaunch apps, reposition windows, restore Brave tabs.
 pub fn restore(session: &Session) -> Result<()> {
     let running = get_running_processes()?;
+    info!("Found {} running processes on the system", running.len());
 
-    for window_info in &session.windows {
+    for (idx, window_info) in session.windows.iter().enumerate() {
         let exe_lower = window_info.exe_path.to_lowercase();
         let exe_name = std::path::Path::new(&exe_lower)
             .file_name()
@@ -26,53 +28,76 @@ pub fn restore(session: &Session) -> Result<()> {
             .to_string_lossy()
             .to_string();
 
-        // Check if already running
+        info!(
+            "[{}/{}] Restoring: {} ({})",
+            idx + 1,
+            session.windows.len(),
+            window_info.title,
+            exe_name
+        );
+
         let already_running = running.contains_key(&exe_name);
 
         if already_running {
-            // Try to find existing window and reposition it
+            info!("  Already running — looking up existing window...");
             if let Some(hwnd) = find_window_by_exe(&window_info.exe_path) {
-                apply_placement(hwnd, window_info)?;
+                info!("  Found existing window. Repositioning to ({}, {}) {}x{}",
+                    window_info.x, window_info.y, window_info.width, window_info.height);
+                if let Err(e) = apply_placement(hwnd, window_info) {
+                    warn!("  Failed to reposition: {}", e);
+                }
                 continue;
+            } else {
+                info!("  No window found despite running process. Launching anyway.");
             }
         }
 
-        // Launch the application
-        match std::process::Command::new(&window_info.exe_path)
-            .spawn()
-        {
+        info!("  Launching: {}", window_info.exe_path);
+        match std::process::Command::new(&window_info.exe_path).spawn() {
             Ok(child) => {
-                // Wait for window to appear and reposition it
                 let pid = child.id();
+                info!("  Spawned PID {}. Waiting for window...", pid);
                 if let Some(hwnd) = wait_for_window(pid, 15_000) {
-                    // Small delay for the window to fully initialize
+                    info!("  Window detected. Repositioning to ({}, {}) {}x{}",
+                        window_info.x, window_info.y, window_info.width, window_info.height);
                     std::thread::sleep(std::time::Duration::from_millis(500));
-                    apply_placement(hwnd, window_info)?;
+                    if let Err(e) = apply_placement(hwnd, window_info) {
+                        warn!("  Failed to reposition: {}", e);
+                    }
 
-                    // Move to correct virtual desktop if needed
                     if let Some(vd_index) = window_info.virtual_desktop_index {
-                        if let Ok(guid) = vdesktop::get_desktop_guid_by_index(vd_index) {
-                            if let Ok(vdm) = vdesktop::VirtualDesktopManager::new() {
-                                let _ = vdm.move_to_desktop(hwnd, &guid);
-                            }
+                        info!("  Moving to virtual desktop {}", vd_index + 1);
+                        match vdesktop::get_desktop_guid_by_index(vd_index) {
+                            Ok(guid) => match vdesktop::VirtualDesktopManager::new() {
+                                Ok(vdm) => {
+                                    if let Err(e) = vdm.move_to_desktop(hwnd, &guid) {
+                                        warn!("  Failed to move to desktop {}: {}", vd_index + 1, e);
+                                    }
+                                }
+                                Err(e) => warn!("  Could not init VirtualDesktopManager: {}", e),
+                            },
+                            Err(e) => warn!("  Desktop {} not available: {}", vd_index + 1, e),
                         }
                     }
 
-                    // Re-apply placement after a short delay (some apps override initial position)
                     std::thread::sleep(std::time::Duration::from_millis(500));
                     let _ = apply_placement(hwnd, window_info);
+                } else {
+                    warn!("  Timed out waiting for window from PID {}", pid);
                 }
             }
             Err(e) => {
-                log::warn!("Failed to launch {}: {}", window_info.exe_path, e);
+                warn!("  Failed to launch {}: {}", window_info.exe_path, e);
             }
         }
     }
 
-    // Restore Brave tabs
     if !session.brave_tabs.is_empty() {
+        info!("Restoring {} Brave tabs...", session.brave_tabs.len());
         if let Err(e) = crate::brave::restore_tabs(&session.brave_tabs) {
-            log::warn!("Failed to restore Brave tabs: {}", e);
+            warn!("Failed to restore Brave tabs: {}", e);
+        } else {
+            info!("Brave tabs restored");
         }
     }
 

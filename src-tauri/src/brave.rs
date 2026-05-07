@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use log::{info, warn};
 use serde::Deserialize;
 
 use crate::session::BraveTab;
@@ -16,9 +17,10 @@ struct CdpTarget {
 /// Capture open Brave tabs via Chrome DevTools Protocol.
 /// Returns an empty vec if Brave is not running with --remote-debugging-port.
 pub fn capture_tabs() -> Result<Vec<BraveTab>> {
+    info!("Querying Brave CDP at {}", CDP_URL);
     let body: String = ureq::get(CDP_URL)
         .call()
-        .context("Brave is not running with remote debugging enabled")?
+        .context("Brave is not running with remote debugging enabled (start brave with --remote-debugging-port=9222)")?
         .body_mut()
         .read_to_string()
         .context("Failed to read CDP response")?;
@@ -52,6 +54,10 @@ pub fn restore_tabs(tabs: &[BraveTab]) -> Result<()> {
     }
 
     let brave_path = find_brave_exe()?;
+    info!("Launching Brave at {} with {} tabs", brave_path, tabs.len());
+    for t in tabs {
+        info!("  -> {}", t.url);
+    }
     let urls: Vec<&str> = tabs.iter().map(|t| t.url.as_str()).collect();
 
     std::process::Command::new(&brave_path)
@@ -89,5 +95,6 @@ fn find_brave_exe() -> Result<String> {
         }
     }
 
+    warn!("Brave browser not found in any standard location");
     anyhow::bail!("Brave browser not found. Please ensure Brave is installed.")
 }

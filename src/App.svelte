@@ -11,6 +11,7 @@
     restoreSession,
     type SessionSummary,
     type Session,
+    type RestoreReport,
   } from "./lib/api";
 
   let sessions = $state<SessionSummary[]>([]);
@@ -20,6 +21,7 @@
   let saving = $state(false);
   let restoring = $state(false);
   let error = $state<string | null>(null);
+  let lastReport = $state<RestoreReport | null>(null);
 
   onMount(() => {
     refreshSessions();
@@ -35,6 +37,7 @@
 
   async function handleSelect(name: string) {
     selectedName = name;
+    lastReport = null;
     try {
       selectedSession = await getSession(name);
       error = null;
@@ -61,8 +64,9 @@
   async function handleRestore(name: string) {
     restoring = true;
     error = null;
+    lastReport = null;
     try {
-      await restoreSession(name);
+      lastReport = await restoreSession(name);
     } catch (e) {
       error = `Failed to restore session: ${e}`;
     } finally {
@@ -114,6 +118,7 @@
         onRestore={handleRestore}
         onDelete={handleDelete}
         {restoring}
+        report={lastReport}
       />
     </section>
   </div>

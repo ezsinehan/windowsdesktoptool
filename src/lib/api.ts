@@ -17,6 +17,7 @@ export interface WindowInfo {
   height: number;
   show_state: "Normal" | "Minimized" | "Maximized";
   virtual_desktop_index: number | null;
+  hwnd: number | null;
 }
 
 export interface BraveTab {
@@ -29,6 +30,30 @@ export interface Session {
   created_at: string;
   windows: WindowInfo[];
   brave_tabs: BraveTab[];
+}
+
+export type OutcomeStatus = "Success" | "Partial" | "Failed" | "Skipped";
+
+export interface WindowOutcome {
+  exe_path: string;
+  title: string;
+  status: OutcomeStatus;
+  message: string;
+  steps: string[];
+}
+
+export interface BraveOutcome {
+  status: OutcomeStatus;
+  message: string;
+  tab_count: number;
+}
+
+export interface RestoreReport {
+  session_name: string;
+  started_at: string;
+  duration_ms: number;
+  windows: WindowOutcome[];
+  brave: BraveOutcome | null;
 }
 
 export async function saveSession(name: string): Promise<Session> {
@@ -47,6 +72,6 @@ export async function deleteSession(name: string): Promise<void> {
   return invoke<void>("delete_session", { name });
 }
 
-export async function restoreSession(name: string): Promise<void> {
-  return invoke<void>("restore_session", { name });
+export async function restoreSession(name: string): Promise<RestoreReport> {
+  return invoke<RestoreReport>("restore_session", { name });
 }

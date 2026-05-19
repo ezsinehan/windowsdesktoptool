@@ -6,7 +6,7 @@ mod vdesktop;
 mod winapi_helpers;
 
 use log::{error, info};
-use session::{Session, SessionSummary};
+use session::{RestoreReport, Session, SessionSummary};
 
 #[tauri::command]
 fn save_session(name: String) -> Result<Session, String> {
@@ -54,7 +54,7 @@ fn delete_session(name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn restore_session(name: String) -> Result<(), String> {
+async fn restore_session(name: String) -> Result<RestoreReport, String> {
     info!("=== RESTORE SESSION: '{}' ===", name);
     let session = session::load(&name).map_err(|e| {
         error!("Failed to load session: {}", e);
@@ -65,14 +65,16 @@ async fn restore_session(name: String) -> Result<(), String> {
         session.windows.len(),
         session.brave_tabs.len()
     );
-    let result = restore::restore(&session).map_err(|e| {
+    let report = restore::restore(&session).map_err(|e| {
         error!("Restore failed: {}", e);
         e.to_string()
-    });
-    if result.is_ok() {
-        info!("=== RESTORE COMPLETE ===");
-    }
-    result
+    })?;
+    info!(
+        "=== RESTORE COMPLETE in {}ms — {} window outcomes ===",
+        report.duration_ms,
+        report.windows.len()
+    );
+    Ok(report)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

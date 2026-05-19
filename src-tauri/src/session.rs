@@ -31,6 +31,11 @@ pub struct WindowInfo {
     pub height: i32,
     pub show_state: ShowState,
     pub virtual_desktop_index: Option<u32>,
+    /// HWND serialized as u64 so multi-instance restore can target the right
+    /// window. Stale across process restarts — restore validates it before use
+    /// and falls back to spawn if invalid.
+    #[serde(default)]
+    pub hwnd: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +49,39 @@ pub enum ShowState {
 pub struct BraveTab {
     pub url: String,
     pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum OutcomeStatus {
+    Success,
+    Partial,
+    Failed,
+    Skipped,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowOutcome {
+    pub exe_path: String,
+    pub title: String,
+    pub status: OutcomeStatus,
+    pub message: String,
+    pub steps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BraveOutcome {
+    pub status: OutcomeStatus,
+    pub message: String,
+    pub tab_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestoreReport {
+    pub session_name: String,
+    pub started_at: DateTime<Utc>,
+    pub duration_ms: u64,
+    pub windows: Vec<WindowOutcome>,
+    pub brave: Option<BraveOutcome>,
 }
 
 impl Session {

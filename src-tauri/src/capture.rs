@@ -8,7 +8,10 @@ use crate::session::WindowInfo;
 use crate::vdesktop;
 use crate::winapi_helpers;
 
-/// List of exe filenames to exclude from capture (system/shell processes).
+/// List of exe filenames to exclude from capture: system shell / overlay
+/// processes that aren't real user-facing apps. Elevation-required tools
+/// (Taskmgr, regedit, mmc, etc.) are NOT excluded — restore handles those
+/// via a ShellExecuteEx + "runas" fallback that triggers a UAC prompt.
 const EXCLUDED_EXES: &[&str] = &[
     "explorer.exe",
     "shellexperiencehost.exe",
@@ -117,6 +120,7 @@ unsafe extern "system" fn enum_window_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
         height: placement.height,
         show_state: placement.show_state,
         virtual_desktop_index: vd_index,
+        hwnd: Some(hwnd.0 as u64),
     };
 
     if let Ok(mut guard) = results.lock() {
